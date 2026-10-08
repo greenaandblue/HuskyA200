@@ -1,0 +1,11 @@
+*.mcap
+*.db3
+*.zip
+bag/
+.DS_Store
+*.mcap
+*.db3
+*.zip
+*.mov
+bag/
+.DS_Store
