@@ -1,0 +1,14 @@
+// zenoh-bridge-ros2dds config shared by the Husky and the Go2.
+// Only /go2/* crosses the Wi-Fi; Husky's own topics and the Go2's internal rt/* stay local.
+{
+  plugins: {
+    ros2dds: {
+      allow: {
+        publishers: ["/go2/.*"],
+        subscribers: ["/go2/.*"],
+        service_servers: ["/go2/.*"],
+        service_clients: ["/go2/.*"],
+      },
+    },
+  },
+}
