@@ -62,12 +62,17 @@ public:
     cmd_sub_ = create_subscription<geometry_msgs::msg::Twist>(
       "cmd_vel", 10, std::bind(&Go2Bridge::onCmdVel, this, std::placeholders::_1));
 
-    srv_stand_up_ = create_service<std_srvs::srv::Trigger>("stand_up",
-      [this](auto, auto res) { res->success = (sport_->StandUp() == 0); res->message = "StandUp"; });
-    srv_stand_down_ = create_service<std_srvs::srv::Trigger>("stand_down",
-      [this](auto, auto res) { res->success = (sport_->StandDown() == 0); res->message = "StandDown"; });
-    srv_stop_ = create_service<std_srvs::srv::Trigger>("stop",
-      [this](auto, auto res) { moving_ = false; res->success = (sport_->StopMove() == 0); res->message = "StopMove"; });
+    // Explicit callback types: Foxy's rclcpp cannot deduce the signature of generic (auto) lambdas.
+    using Trigger = std_srvs::srv::Trigger;
+    srv_stand_up_ = create_service<Trigger>("stand_up",
+      [this](const std::shared_ptr<Trigger::Request>, std::shared_ptr<Trigger::Response> res) {
+        res->success = (sport_->StandUp() == 0); res->message = "StandUp"; });
+    srv_stand_down_ = create_service<Trigger>("stand_down",
+      [this](const std::shared_ptr<Trigger::Request>, std::shared_ptr<Trigger::Response> res) {
+        res->success = (sport_->StandDown() == 0); res->message = "StandDown"; });
+    srv_stop_ = create_service<Trigger>("stop",
+      [this](const std::shared_ptr<Trigger::Request>, std::shared_ptr<Trigger::Response> res) {
+        moving_ = false; res->success = (sport_->StopMove() == 0); res->message = "StopMove"; });
 
     odom_timer_ = create_wall_timer(
       std::chrono::duration<double>(1.0 / odom_rate), std::bind(&Go2Bridge::publishOdom, this));
