@@ -1,11 +1,15 @@
-// go2_bridge: ROS 2 Jazzy node running on the Husky that talks to a Unitree Go2
-// over unitree_sdk2 (DDS on the Go2's 192.168.123.0/24 network).
+// go2_bridge: ROS 2 node (runs on the Go2's Jetson, ROS 2 Foxy) that talks to the Go2
+// over unitree_sdk2 (DDS domain 0 on the dog's internal 192.168.123.0/24 network).
 //
 //   Sub:  cmd_vel   (geometry_msgs/Twist)  -> SportClient::Move(vx, vy, wz)
+//   Sub:  command   (std_msgs/String)      -> "stand_up" | "stand_down" | "recovery_stand" | "stop"
 //   Pub:  odom      (nav_msgs/Odometry)    <- rt/sportmodestate
-//   Srv:  stand_up / stand_down / stop     (std_srvs/Trigger)
+//   Srv:  stand_up / stand_down / stop     (std_srvs/Trigger)  -- local use only:
+//         services do not cross zenoh-bridge-ros2dds when the RMW is Fast DDS,
+//         so remote machines (the Husky) use the `command` topic instead.
 //
-// Run with a namespace, e.g.  --ros-args -r __ns:=/go2 -p network_interface:=enx...
+// Run with ROS_DOMAIN_ID != 0 (domain 0 is the dog's own DDS traffic), e.g.
+//   ROS_DOMAIN_ID=1 ros2 run go2_bridge go2_bridge --ros-args -r __ns:=/go2 -p network_interface:=eth0
 
 #include <algorithm>
 #include <chrono>
@@ -17,7 +21,9 @@
 #include <rclcpp/rclcpp.hpp>
 #include <geometry_msgs/msg/twist.hpp>
 #include <nav_msgs/msg/odometry.hpp>
+#include <std_msgs/msg/string.hpp>
 #include <std_srvs/srv/trigger.hpp>
+#include <thread>
 #include <tf2/LinearMath/Quaternion.h>
 
 #include <unitree/robot/go2/sport/sport_client.hpp>
@@ -61,6 +67,8 @@ public:
     odom_pub_ = create_publisher<nav_msgs::msg::Odometry>("odom", 10);
     cmd_sub_ = create_subscription<geometry_msgs::msg::Twist>(
       "cmd_vel", 10, std::bind(&Go2Bridge::onCmdVel, this, std::placeholders::_1));
+    mode_sub_ = create_subscription<std_msgs::msg::String>(
+      "command", 10, std::bind(&Go2Bridge::onCommand, this, std::placeholders::_1));
 
     // Explicit callback types: Foxy's rclcpp cannot deduce the signature of generic (auto) lambdas.
     using Trigger = std_srvs::srv::Trigger;
@@ -152,6 +160,31 @@ private:
     moving_ = true;
   }
 
+  void onCommand(const std_msgs::msg::String::SharedPtr msg)
+  {
+    const std::string & c = msg->data;
+    int32_t ret = -1;
+    if (c == "stand_up") {
+      // Locked stand, then unlock into balance stand so Move() is accepted.
+      ret = sport_->StandUp();
+      std::this_thread::sleep_for(1500ms);
+      if (ret == 0) ret = sport_->BalanceStand();
+    } else if (c == "recovery_stand") {
+      ret = sport_->RecoveryStand();
+    } else if (c == "stand_down") {
+      moving_ = false;
+      sport_->StopMove();
+      ret = sport_->StandDown();
+    } else if (c == "stop") {
+      moving_ = false;
+      ret = sport_->StopMove();
+    } else {
+      RCLCPP_WARN(get_logger(), "unknown command '%s' (use stand_up | stand_down | recovery_stand | stop)", c.c_str());
+      return;
+    }
+    RCLCPP_INFO(get_logger(), "command '%s' -> ret=%d", c.c_str(), ret);
+  }
+
   void watchdog()
   {
     if (moving_ && (now() - last_cmd_).seconds() > cmd_timeout_) {
@@ -175,6 +208,7 @@ private:
   // ros
   rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_pub_;
   rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_sub_;
+  rclcpp::Subscription<std_msgs::msg::String>::SharedPtr mode_sub_;
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr srv_stand_up_, srv_stand_down_, srv_stop_;
   rclcpp::TimerBase::SharedPtr odom_timer_, watchdog_timer_;
   rclcpp::Time last_cmd_{0, 0, RCL_ROS_TIME};

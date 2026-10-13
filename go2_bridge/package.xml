@@ -2,7 +2,7 @@
 <package format="3">
   <name>go2_bridge</name>
   <version>0.1.0</version>
-  <description>ROS 2 Jazzy bridge on the Husky A200 for a Unitree Go2 via unitree_sdk2</description>
+  <description>ROS 2 bridge for a Unitree Go2 via unitree_sdk2 (runs on the Go2 Jetson)</description>
   <maintainer email="hql5777@psu.edu">Huihang Liu</maintainer>
   <license>BSD-3-Clause</license>
 
@@ -11,6 +11,7 @@
   <depend>rclcpp</depend>
   <depend>geometry_msgs</depend>
   <depend>nav_msgs</depend>
+  <depend>std_msgs</depend>
   <depend>std_srvs</depend>
   <depend>tf2</depend>
 
