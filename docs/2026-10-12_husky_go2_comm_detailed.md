@@ -1,9 +1,9 @@
-# Husky A200 ↔ Unitree Go2 Communication — Detailed Log (2026-10-12)
+# Husky A200 ↔ Unitree Go2 Communication — Detailed Log (2026-10-12, updated 2026-10-13)
 
 Companion to the short summary: [`2026-10-12_husky_go2_comm_summary.md`](2026-10-12_husky_go2_comm_summary.md).
 This file records the full setup, every problem hit on 2026-10-12 with its root cause and fix, the exact commands, and the full source code as of the end of the day.
 
-> **Status at end of day:** Go2 → Husky odometry over Wi-Fi works. Husky → Go2 `cmd_vel` reaches `go2_bridge`. The `/go2/command` topic version of `go2_bridge` was written at the end of the session and **has not been tested on the robot yet**.
+> **Status (2026-10-13):** Go2 → Husky odometry over Wi-Fi works. Husky → Go2 `cmd_vel` reaches `go2_bridge`. **Husky → Go2 `/go2/command` works: `stand_up` and `stand_down` sent from the Husky make the real dog stand up and lie down** (§4.11). Walking via `cmd_vel` while standing is the next test.
 
 ---
 
@@ -51,6 +51,7 @@ This file records the full setup, every problem hit on 2026-10-12 with its root 
 | Lab desktop `E5-AE-ROS-PC` | `wlp131s0f0` = `10.170.32.181/19` | SSH to the Go2 over Wi-Fi |
 | Labmate's Mac | wired to Go2, `192.168.123.222` | SSH over the dog's internal network (survives Wi-Fi drops) |
 | Huihang's Mac | `192.168.131.x` on the waypoint Wi-Fi | SSH to the Husky; pushes code to GitHub |
+| Huihang's Mac (10-13) | additionally **wired to the Go2**, manual `192.168.123.x/24`, router field empty | `ssh unitree@192.168.123.18` — survives Go2 Wi-Fi drops |
 
 ### 1.4 Network topology
 
@@ -93,7 +94,7 @@ This file records the full setup, every problem hit on 2026-10-12 with its root 
 |---|---|---|---|
 | `/go2/odom` | `nav_msgs/Odometry` | out | Pose from `rt/sportmodestate` (position, IMU rpy → quaternion), twist rotated into body frame. Frames `go2/odom` → `go2/base_link` |
 | `/go2/cmd_vel` | `geometry_msgs/Twist` | in | `SportClient::Move(vx, vy, wz)`, clamped by `max_vx/max_vy/max_wz`. Watchdog: `StopMove()` if no message for `cmd_timeout` (0.5 s) |
-| `/go2/command` | `std_msgs/String` | in | `stand_up` (StandUp → BalanceStand), `stand_down`, `recovery_stand`, `stop` — **new, untested** |
+| `/go2/command` | `std_msgs/String` | in | `stand_up` (StandUp → BalanceStand), `stand_down`, `recovery_stand`, `stop` — `stand_up` / `stand_down` **verified from the Husky 2026-10-13** |
 | `/go2/stand_up`, `/go2/stand_down`, `/go2/stop` | `std_srvs/Trigger` | service | Work locally on the Go2 only; **do not cross zenoh** (§4.9) |
 
 Parameters: `network_interface` (required, `eth0`), `max_vx` 0.5, `max_vy` 0.3, `max_wz` 0.8, `cmd_timeout` 0.5, `odom_frame`, `base_frame`, `odom_rate` 50.
@@ -186,7 +187,7 @@ source /etc/clearpath/setup.bash
 zenoh-bridge-ros2dds -c ~/go2_zenoh.json5 -l tcp/0.0.0.0:7447
 ```
 
-**B — Go2: zenoh (connect)** (keep running)
+**B — Go2: zenoh (connect)** (keep running — easy to forget; without it the Husky's zenoh log shows no `Remote bridge … announces` lines and `ros2 topic pub -w 1` waits forever)
 ```bash
 source /opt/ros/foxy/setup.bash
 export ROS_DOMAIN_ID=1
@@ -201,7 +202,7 @@ source /etc/clearpath/setup.bash
 ros2 topic list | grep go2
 ros2 topic echo /go2/odom --once            # works (verified)
 ros2 topic hz /go2/odom                     # expect ~50 Hz
-# motion (clear area first) — /go2/command version not yet tested:
+# motion (clear area first) — stand_up / stand_down verified 2026-10-13:
 ros2 topic pub --once -w 1 /go2/command std_msgs/msg/String "{data: stand_up}"
 ros2 topic pub -r 10 /go2/cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.1}}"   # Ctrl+C → dog stops after 0.5 s
 ros2 topic pub --once -w 1 /go2/command std_msgs/msg/String "{data: stand_down}"
@@ -264,6 +265,15 @@ Notes: Foxy's `ros2 topic echo` has no `--once` (Jazzy does). Use Tab completion
 - 21:16:41 UTC: Husky zenoh logged `Remote ROS 2 bridge left` (Go2 bridge gone — stopped by hand or Wi-Fi drop; to be checked).
 - Whether the dog physically walked was not recorded; the dog has to be in balance stand for `Move()` to take effect.
 
+### 4.11 2026-10-13 — `/go2/command` verified end to end
+- Setup change: Huihang's Mac wired directly to the Go2 (`ssh unitree@192.168.123.18`); Go2 clock was correct today (14:13 EDT).
+- On the Go2: `git pull` (already up to date, `grep -c onCommand` = 2), clean rebuild of `go2_bridge` (23.8 s), started with `ROS_DOMAIN_ID=1` → `go2_bridge up on interface 'eth0'`.
+- **First attempt:** Husky `ros2 topic pub --once -w 1 /go2/command … stand_up` printed `Waiting for at least 1 matching subscription(s)...` forever. The Husky zenoh log showed the local `Route Publisher (ROS:/go2/command -> Zenoh:go2/command) created`, but **no `Remote bridge … announces` lines** → the Go2-side zenoh bridge (terminal B) had not been started.
+- **Fix:** started terminal B on the Go2. Its log then shows `Remote bridge 869d6a7c… announces Publisher go2/command - Allowed` each time the Husky publishes.
+- **Result:** `stand_up`, `stand_up`, `stand_down`, `stand_up` sent from the Husky (18:25 UTC) were each published immediately (`publishing #1`) and **the dog stood up / lay down accordingly**.
+
+![2026-10-13 test](images/2026-10-13_go2_command_test.png)
+
 ---
 
 ## 5. Troubleshooting quick reference
@@ -280,13 +290,14 @@ Notes: Foxy's `ros2 topic echo` has no `--once` (Jazzy does). Use Tab completion
 | zenoh `No such file or directory` | wrong config path | check path, use Tab completion |
 | `/go2/*` missing on Husky | a bridge or `go2_bridge` not running, or Go2 `ROS_DOMAIN_ID` ≠ 1 | check all 4 terminals |
 | service call hangs, zenoh "less than 20 bytes" | services not bridged with Fast DDS | use `/go2/command` topic |
+| `Waiting for at least 1 matching subscription(s)` on Husky | Go2 zenoh bridge (B) or `go2_bridge` (A) not running | start them; Husky zenoh log must show `Remote bridge … announces` |
 | `cmd_vel timeout -> StopMove` while publishing | Wi-Fi gaps > `cmd_timeout` | measure `ros2 topic hz`; raise `cmd_timeout` |
 
 ---
 
 ## 6. Open issues / next steps
 
-1. Rebuild with the `/go2/command` version; test `stand_up` → `cmd_vel` → `stand_down` on the real dog and confirm motion.
+1. ~~Rebuild with the `/go2/command` version; test `stand_up` / `stand_down`~~ — done 2026-10-13. Next: walking via `/go2/cmd_vel` while standing.
 2. Investigate `cmd_vel` delivery gaps (on the Go2: `ros2 topic hz /go2/cmd_vel` with `ROS_DOMAIN_ID=1`); consider `cmd_timeout:=1.0`.
 3. Check why the Go2 zenoh bridge left at 21:16:41 UTC; monitor `wlan0` stability; make `power_save off` persistent.
 4. Make the route fix permanent (`ipv4.never-default`) and set up time sync on the Go2.

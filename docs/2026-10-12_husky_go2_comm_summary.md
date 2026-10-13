@@ -1,5 +1,7 @@
 # Husky A200 ↔ Unitree Go2 Communication — Progress Summary (2026-10-12)
 
+**Last updated: 2026-10-13 — the Husky can now command the Go2 to stand up / lie down over Wi-Fi.**
+
 > 中文版见下半部分。Detailed log, configs and full code: [`2026-10-12_husky_go2_comm_detailed.md`](2026-10-12_husky_go2_comm_detailed.md)
 
 ## Goal
@@ -29,6 +31,11 @@ Let the Clearpath Husky A200 (ROS 2 Jazzy) and the Unitree Go2 EDU (ROS 2 Foxy o
 | `go2_bridge` | Builds and runs on Foxy; `/go2/odom` published on the Go2 |
 | Go2 → Husky | `ros2 topic echo /go2/odom` on the **Husky** receives the dog's odometry over Wi-Fi |
 | Husky → Go2 | `/go2/cmd_vel` from the Husky reaches `go2_bridge` (Move called, watchdog StopMove logged) |
+| **Husky → Go2 commands (10-13)** | `ros2 topic pub /go2/command … stand_up / stand_down` on the **Husky** makes the dog stand up / lie down |
+
+![Husky commanding the Go2 over zenoh (2026-10-13)](images/2026-10-13_go2_command_test.png)
+
+*Top-left: SSH to the Go2 over Ethernet · top-right: Go2 zenoh bridge (sees the Husky's `go2/command` publisher) · bottom-left: Husky zenoh bridge · bottom-right: Husky sends `stand_up` / `stand_down`.*
 
 ## Key problems solved
 
@@ -39,10 +46,12 @@ Let the Clearpath Husky A200 (ROS 2 Jazzy) and the Unitree Go2 EDU (ROS 2 Foxy o
 5. **CycloneDDS header/library clash** between `unitree_sdk2` and ROS Foxy → CMake include order + RPATH.
 6. **`bad_alloc` storm** – ROS (Fast DDS, domain 0) collides with the dog's own DDS traffic on domain 0 → run all ROS on the Go2 with `ROS_DOMAIN_ID=1`.
 7. **ROS services don't cross zenoh** with Fast DDS (request < 20 bytes, dropped) → added the `/go2/command` topic.
+8. **(10-13) Husky publisher stuck on "Waiting for at least 1 matching subscription(s)"** – the Go2-side zenoh bridge had not been started → start all 4 terminals.
 
 ## Open issues / next steps ⚠️
 
-- [ ] Rebuild with the `/go2/command` version and test stand-up / walk / stand-down **on the real dog**; confirm the dog physically moves.
+- [x] Rebuild with the `/go2/command` version; stand-up / stand-down from the Husky work on the real dog (10-13).
+- [ ] Walking test: `/go2/cmd_vel` from the Husky while the dog is standing.
 - [ ] `cmd_vel timeout` fired 3× while the Husky published continuously at 10 Hz → Wi-Fi delivery gaps > 0.5 s. Measure with `ros2 topic hz /go2/cmd_vel` on the Go2; consider `cmd_timeout` ≈ 1.0 s.
 - [ ] Go2 zenoh bridge disconnected at 21:16:41 UTC ("Remote ROS 2 bridge left") – check whether Wi-Fi dropped again.
 - [ ] Go2 Wi-Fi (`wlan0`) dropped once and needed a Jetson reboot → keep `power_save off`, watch stability.
@@ -73,6 +82,7 @@ Let the Clearpath Husky A200 (ROS 2 Jazzy) and the Unitree Go2 EDU (ROS 2 Foxy o
 | `go2_bridge` | 在 Foxy 上编译、运行成功，Go2 本机能收到 `/go2/odom` |
 | Go2 → Husky | 在 **Husky** 上 `ros2 topic echo /go2/odom` 能收到狗的数据 |
 | Husky → Go2 | Husky 发的 `/go2/cmd_vel` 已到达 `go2_bridge`（调用了 Move，日志中出现看门狗的 StopMove） |
+| **Husky → Go2 指令（10-13）** | 在 **Husky** 上发布 `/go2/command` 的 `stand_up` / `stand_down`，狗能站起来 / 趴下 |
 
 ## 解决的主要问题
 
@@ -83,10 +93,12 @@ Let the Clearpath Husky A200 (ROS 2 Jazzy) and the Unitree Go2 EDU (ROS 2 Foxy o
 5. **`unitree_sdk2` 与 ROS Foxy 的 CycloneDDS 头文件 / 库冲突** → 在 CMake 中调整 include 顺序并设置 RPATH。
 6. **大量 `bad_alloc`**：ROS 的 Fast DDS 在域 0 与狗自己的 DDS 流量冲突 → Go2 上所有 ROS 程序使用 `ROS_DOMAIN_ID=1`。
 7. **ROS 服务无法通过 zenoh**（Fast DDS 的请求不足 20 字节，被丢弃）→ 新增 `/go2/command` 话题替代。
+8. **（10-13）Husky 发布时一直显示 "Waiting for at least 1 matching subscription(s)"**：狗这边的 zenoh 桥没有启动 → 4 个窗口都要启动。
 
 ## 尚未解决 / 下一步 ⚠️
 
-- [ ] 编译带 `/go2/command` 的新版本，在真狗上测试站立、行走、趴下，确认狗确实动了。
+- [x] 编译带 `/go2/command` 的新版本；从 Husky 控制狗站立、趴下已在真狗上验证（10-13）。
+- [ ] 行走测试：狗站立时，从 Husky 发布 `/go2/cmd_vel`。
 - [ ] Husky 以 10 Hz 连续发布时，`cmd_vel timeout` 触发了 3 次 → Wi-Fi 上有超过 0.5 秒的传输间断。在 Go2 上用 `ros2 topic hz /go2/cmd_vel` 测量，考虑把 `cmd_timeout` 调到 1.0 秒左右。
 - [ ] Go2 的 zenoh 桥在 21:16:41 UTC 断开（"Remote ROS 2 bridge left"），需要确认是不是 Wi-Fi 又掉线了。
 - [ ] Go2 的 Wi-Fi（`wlan0`）掉线过一次，需要重启 Jetson 才恢复 → 保持 `power_save off`，观察稳定性。
