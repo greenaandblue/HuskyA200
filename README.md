@@ -1,156 +1,178 @@
-# HuskyA200
+# Husky A200 on ROS 2 Jazzy: LiDAR Mapping, Nav2 and a Unitree Go2 Bridge
 
-Clearpath Husky A200（PSU13）在 **Ubuntu 24.04 + ROS 2 Jazzy** 下的配置、操作流程和排错记录。
+**English** | [中文](README.zh-CN.md)
 
-> 旧系统是 ROS Kinetic。2026 年 8～9 月按 Clearpath 官方文档重装为 Jazzy。
+![ROS 2 Jazzy](https://img.shields.io/badge/ROS%202-Jazzy-22314E?logo=ros)
+![Ubuntu 24.04](https://img.shields.io/badge/Ubuntu-24.04-E95420?logo=ubuntu&logoColor=white)
+![C++17](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
+![Python](https://img.shields.io/badge/Python-3-3776AB?logo=python&logoColor=white)
 
----
+Bring-up, mapping and multi-robot communication for a **Clearpath Husky A200** (serial `a200-0544`) at Penn State.
+The robot was moved from ROS Kinetic to **Ubuntu 24.04 + ROS 2 Jazzy**. This repository holds the configuration, operating procedures, a recorded LiDAR dataset with a 3D map, and `go2_bridge`, a ROS 2 package that connects the Husky to a **Unitree Go2** over campus Wi‑Fi.
 
-## 硬件与网络
+<p align="center">
+  <img src="docs/images/husky_3d_map_top.jpg" width="88%" alt="3D point-cloud map of the lab built from Husky VLP-16 data with KISS-ICP">
+  <br><sub>3D point-cloud map built offline from the <code>husky_1008</code> recording (KISS-ICP + <code>build_map.py</code>). The bright yellow band is the robot's path.</sub>
+</p>
 
-| 项目 | 值 |
+## Highlights
+
+| Area | What was done |
 |---|---|
-| 序列号 | `a200-0544` |
-| ROS 命名空间 | `a200_0544`（注意是下划线） |
-| 机器人用户名 | `admin` |
-| 机器人有线 IP（br0） | `192.168.131.1` |
-| 无线路由器（Waypoint） | `192.168.131.51`，SSID：`PSU13 Waypoint` |
-| Velodyne VLP-16 | `192.168.131.20`，UDP 端口 2368 |
-| 其他传感器（尚未配置） | UM7 IMU、NovAtel GPS |
-| 手柄 | PS4（robot.yaml 中 `controller: ps4`） |
+| **Jazzy bring-up** | Fresh install from Clearpath's docs: `robot.yaml`-driven sensors, a netplan bridge for the wired network, Foxglove visualization and joystick/keyboard teleop |
+| **2D SLAM → Nav2** | Map built with `slam_toolbox`, then AMCL localization and goal navigation with Nav2 on the saved map |
+| **3D LiDAR map** | Offline KISS-ICP on a 7-minute VLP-16 recording: **59.5 m path, 0.13 m end-point drift (≈0.2 %)**, 1.89 M-point map |
+| **Measured extrinsics** | LiDAR pose relative to `base_link` measured on the robot and written back into `robot.yaml` (`xyz = [-0.28, 0, 0.748]` m) |
+| **Husky ↔ Go2 bridge** | `unitree_sdk2` → ROS 2 node on the Go2's Jetson, linked to the Husky with `zenoh-bridge-ros2dds` over TCP. This works even though campus Wi‑Fi blocks multicast and the robots run different ROS 2 distros (Foxy ↔ Jazzy) |
 
-> 密码不要写进本仓库。
+## Repository layout
 
-配置文件备份见 `config/`：
-- `robot.yaml` → 机器人上的 `/etc/clearpath/robot.yaml`
-- `50-clearpath-bridge.yaml` → 机器人上的 `/etc/netplan/50-clearpath-bridge.yaml`
+```
+HuskyA200/
+├── README.md / README.zh-CN.md     Overview (EN) / full operating runbook (中文)
+├── DATA_MANIFEST.md (+ .zh-CN)     Data inventory for the reconstruction & digital-twin teams
+├── config/                         Robot-side network config backup
+├── samples/husky_1008/             LiDAR dataset: 2D map, 3D map, KISS-ICP poses, robot.yaml, build_map.py
+├── go2_bridge/                     ROS 2 package that runs on the Go2's Jetson (C++, unitree_sdk2)
+├── go2_tools/go2_state_test/       SDK-only state reader, no ROS (skipped by colcon)
+└── docs/                           Husky ↔ Go2 communication notes (summary + detailed log)
+```
 
----
+## System overview
 
-## 日常操作流程
+```mermaid
+flowchart LR
+  subgraph G["Unitree Go2 EDU · Jetson · ROS 2 Foxy"]
+    MCU["Motion MCU<br/>Unitree DDS, domain 0"] <--> BR["go2_bridge<br/>(unitree_sdk2)"]
+    BR <-->|"ROS_DOMAIN_ID=1"| ZG["zenoh-bridge-ros2dds<br/>(connect)"]
+  end
+  subgraph H["Clearpath Husky A200 · Ubuntu 24.04 · ROS 2 Jazzy"]
+    ZH["zenoh-bridge-ros2dds<br/>(listen, TCP 7447)"] <--> APP["Husky ROS 2 nodes<br/>SLAM · AMCL · Nav2"]
+    LIDAR["Velodyne VLP-16"] --> APP
+  end
+  ZG <-->|"/go2/* only<br/>TCP over campus Wi-Fi"| ZH
+  MAC["Mac · Foxglove Studio"] -.->|"Foxglove WebSocket"| APP
+```
 
-### 1. 开机
-1. 放在空旷处，确保有人能随时按急停。
-2. 按电源键，旋开急停，确认 lockout 钥匙没锁。
-3. 等 1～2 分钟让 Clearpath 服务启动。
+## Quick start
 
-### 2. 连接
-Mac 连 Wi-Fi `PSU13 Waypoint`，然后：
+### 1. Operate the Husky
+
+Connect to the robot's Wi‑Fi router, then SSH in and source the environment:
 
 ```bash
-ssh admin@192.168.131.1
+ssh admin@<husky-ip>
 source /opt/ros/jazzy/setup.bash
 source /etc/clearpath/setup.bash
+ros2 topic hz /a200_0544/sensors/lidar3d_0/points   # expect ~10 Hz
 ```
 
-### 3. 检查状态
-
-```bash
-systemctl list-units | grep clearpath              # platform / sensors 服务应为 running
-ros2 topic list | grep a200_0544
-ros2 topic hz /a200_0544/sensors/lidar3d_0/points  # 应约 10 Hz
-```
-
-### 4. 可视化（Mac 上用 Foxglove）
-- 用 **Foxglove 桌面版**（网页版连不上 `ws://` 局域网地址）。
-- Open connection → Foxglove WebSocket → `ws://192.168.131.1:8765`
-- 3D 面板中点亮 `/a200_0544/sensors/lidar3d_0/points` 的眼睛图标，Display frame 选 `base_link`。
-
-### 5. 遥控
-- **手柄**：按住 L1 + 推左摇杆。
-- **键盘**（在 SSH 终端里）：
+Drive with the Logitech F710 (hold **LB**, then use the left stick), or from the keyboard:
 
 ```bash
 ros2 run teleop_twist_keyboard teleop_twist_keyboard \
   --ros-args -p stamped:=true -r cmd_vel:=/a200_0544/cmd_vel
 ```
 
-- **命令行测试**（轮子先架空）：
+> Jazzy uses `geometry_msgs/TwistStamped` for velocity commands, and all topics, including TF, live under the `/a200_0544` namespace.
+
+The full step-by-step runbook (power-on, Foxglove, SLAM, Nav2, recording, troubleshooting) is in [**README.zh-CN.md**](README.zh-CN.md).
+
+### 2. Map → localize → navigate
 
 ```bash
-ros2 topic pub -r 10 /a200_0544/cmd_vel geometry_msgs/msg/TwistStamped \
-"{header: {frame_id: base_link}, twist: {linear: {x: 0.2}, angular: {z: 0.0}}}"
-```
+# Build a 2D map (drive slowly, close the loop at the start point)
+ros2 launch clearpath_nav2_demos slam.launch.py setup_path:=/etc/clearpath/ \
+  scan_topic:=/a200_0544/sensors/lidar3d_0/scan
+ros2 run nav2_map_server map_saver_cli -f ~/maps/lab_map --ros-args -r map:=/a200_0544/map
 
-### 6. SLAM 建图
-
-```bash
-# 只需安装一次
-sudo apt install ros-jazzy-clearpath-nav2-demos tmux
-
-# 用 tmux 防止断线中断程序
-tmux new -s husky        # 断线后：tmux attach -t husky
-
-ros2 launch clearpath_nav2_demos slam.launch.py \
-  setup_path:=/etc/clearpath/ \
+# Localize on the saved map, then start Nav2
+ros2 launch clearpath_nav2_demos localization.launch.py setup_path:=/etc/clearpath/ \
+  map:=/home/admin/maps/lab_map.yaml scan_topic:=/a200_0544/sensors/lidar3d_0/scan
+ros2 launch clearpath_nav2_demos nav2.launch.py setup_path:=/etc/clearpath/ \
   scan_topic:=/a200_0544/sensors/lidar3d_0/scan
 ```
 
-- Foxglove 中点亮 `/a200_0544/map`，Display frame 改为 `map`。
-- 慢速行驶（约 0.3 m/s），慢转弯，沿墙走，最后回到起点闭环。
+In Foxglove, publish the initial pose on `/a200_0544/initialpose` and goals on `/a200_0544/goal_pose`.
 
-保存地图：
-
-```bash
-mkdir -p ~/maps
-ros2 run nav2_map_server map_saver_cli -f ~/maps/lab_map \
-  --ros-args -r map:=/a200_0544/map
-```
-
----
-
-## 系统架构要点
-
-- Clearpath Jazzy 的所有配置都来自 `/etc/clearpath/robot.yaml`，改完后运行：
-  ```bash
-  sudo systemctl restart clearpath-robot.service
-  ```
-- 传感器写进 robot.yaml 的 `sensors:` 段即可，驱动由 `clearpath-sensors.service` 自动启动。
-- 速度指令流向：`joy_teleop` / `twist_marker_server` / `cmd_vel` → **twist_mux** → `platform/cmd_vel` → 轮子。手柄优先级最高，按住使能键时会覆盖程序发出的指令。
-- Jazzy 下速度消息类型为 **`TwistStamped`**，不是 `Twist`。
-- TF 话题带命名空间：`/a200_0544/tf`、`/a200_0544/tf_static`。
-- 机器人是 Ubuntu Server，无图形界面；可视化在 Mac（Foxglove）或 Ubuntu 桌面电脑（RViz）上做。
-
-### 在 Ubuntu 桌面电脑上用 RViz
+### 3. Rebuild the 3D map from a recording (no ROS needed)
 
 ```bash
-sudo apt install ros-jazzy-clearpath-desktop   # 需先添加 Clearpath apt 源
-mkdir -p ~/clearpath
-scp admin@192.168.131.1:/etc/clearpath/robot.yaml ~/clearpath/
-ros2 run clearpath_generator_common generate_bash -s ~/clearpath
-source ~/clearpath/setup.bash
-ros2 launch clearpath_viz view_robot.launch.py namespace:=a200_0544
+pip install "kiss-icp[all]" rosbags numpy
+kiss_icp_pipeline --config samples/husky_1008/kiss.yaml \
+  --topic /a200_0544/sensors/lidar3d_0/points <bag_dir>
+python samples/husky_1008/build_map.py <bag_dir> results/latest/<name>_poses.npy
 ```
 
-不装 Clearpath 包时，也可以直接用 rviz2：
+The raw bag (2.5 GB) is not in Git. See [`samples/husky_1008/README.md`](samples/husky_1008/README.md) for where it lives, what each topic contains, and a workaround for `rosbags` and metadata v9.
+
+### 4. Husky ↔ Go2 bridge
+
+Build `go2_bridge` on the Go2's Jetson (ROS 2 Foxy, `unitree_sdk2` installed to `/opt/unitree_robotics`):
 
 ```bash
-rviz2 --ros-args -r /tf:=/a200_0544/tf -r /tf_static:=/a200_0544/tf_static
+cd ~/go2_ws/src && git clone https://github.com/greenaandblue/HuskyA200.git
+cd ~/go2_ws && source /opt/ros/foxy/setup.bash
+colcon build --packages-select go2_bridge
 ```
 
-PointCloud2 不显示时，把 Reliability Policy 改为 **Best Effort**。
+Run it on a ROS domain other than 0, because domain 0 carries the dog's own DDS traffic:
 
----
+```bash
+export ROS_DOMAIN_ID=1 RMW_IMPLEMENTATION=rmw_fastrtps_cpp
+ros2 run go2_bridge go2_bridge --ros-args -r __ns:=/go2 -p network_interface:=eth0
+```
 
-## 排错记录
-
-| 问题 | 原因 | 解决 |
+| Interface | Type | Description |
 |---|---|---|
-| `Unknown topic '/a200-0544/cmd_vel'` | 命名空间用下划线，不是短横线 | 用 `/a200_0544/...` |
-| Mac `ssh` 超时，ping 不通 `192.168.131.1` | 重装后有线网口没有 IP，没有 br0 网桥 | 新建 `/etc/netplan/50-clearpath-bridge.yaml`（见 `config/`），然后 `sudo netplan try` |
-| netplan 报 `unknown key 'br0'` | `bridges:` 缩进错了，被放在 `ethernets:` 下面 | `bridges:` 与 `ethernets:` 对齐（都缩进 2 个空格） |
-| `REMOTE HOST IDENTIFICATION HAS CHANGED` | 重装后 SSH 主机密钥变了 | Mac 上运行 `ssh-keygen -R 192.168.131.1` |
-| 用户名 `administrator` 登录失败 | 旧系统用户名是 administrator，新系统是 `admin` | `ssh admin@192.168.131.1` |
-| `ssh.service` 显示 inactive | Ubuntu 24.04 由 `ssh.socket` 按需启动 SSH，属正常现象 | 无需处理 |
-| `package 'clearpath_viz' not found` | 机器人上没有这个包，或桌面电脑没装 | 在桌面电脑上安装 `ros-jazzy-clearpath-desktop` |
-| Foxglove 能连上但看不到点云 | 话题默认是隐藏的 | 点亮话题右边的眼睛图标 |
+| `/go2/odom` | `nav_msgs/Odometry` (out, 50 Hz) | Pose and body-frame twist from `rt/sportmodestate` |
+| `/go2/cmd_vel` | `geometry_msgs/Twist` (in) | `SportClient::Move()`, clamped by `max_vx/max_vy/max_wz`; stops after `cmd_timeout` (0.5 s) without input |
+| `/go2/command` | `std_msgs/String` (in) | `stand_up`, `stand_down`, `recovery_stand`, `stop` |
 
----
+Starting the zenoh bridges, the full 4-terminal procedure, and every issue hit along the way (CycloneDDS header clash, `bad_alloc` storm on domain 0, services not crossing zenoh) are covered in [`docs/2026-10-12_husky_go2_comm_detailed.md`](docs/2026-10-12_husky_go2_comm_detailed.md).
 
-## 待办
+## Results
 
-- [ ] 排查 `ros2 topic hz .../points` 没有输出的问题（依次检查 ping、tcpdump、sensors 日志）
-- [ ] 测量雷达相对于 base_link 的真实位置，更新 robot.yaml 的 `xyz`（目前是估算值 `[0, 0, 0.5]`）
-- [ ] 在 robot.yaml 中加入 UM7 IMU 和 NovAtel GPS
-- [ ] 完成第一张 SLAM 地图并存入 `maps/`
-- [ ] 用 Nav2 做基于地图的自动导航
+<table>
+<tr>
+<td width="42%"><img src="docs/images/husky_2d_map.png" alt="2D occupancy map from slam_toolbox"></td>
+<td><img src="docs/images/husky_3d_map_side.jpg" alt="Side view of the 3D point-cloud map"></td>
+</tr>
+<tr>
+<td align="center"><sub>2D occupancy grid (slam_toolbox, 0.05 m/px)</sub></td>
+<td align="center"><sub>3D map, side view</sub></td>
+</tr>
+</table>
+
+| KISS-ICP metric (`husky_1008`) | Value |
+|---|---|
+| Frames processed | 4109 / 4109 (VLP-16 at ≈9.9 Hz) |
+| Path length | 59.5 m |
+| End-point drift (loop back to start) | 0.13 m |
+| Map size | 1,893,669 points at 0.05 m voxels |
+| Offline speed | ≈277 Hz on a MacBook Air |
+
+## Status and roadmap
+
+- [x] Ubuntu 24.04 + ROS 2 Jazzy bring-up, networking, teleop
+- [x] 2D SLAM, AMCL localization and Nav2 goal navigation
+- [x] Measured LiDAR extrinsics; first LiDAR dataset with 3D map
+- [x] Go2 → Husky odometry and Husky → Go2 `cmd_vel` over Wi‑Fi
+- [ ] Field-test `/go2/command` (stand up / walk / stand down) on the real dog
+- [ ] Launch scripts to replace the 4-terminal manual startup
+- [ ] Align the 3D map and KISS-ICP poses with the `map` frame and the building model
+- [ ] Add the UM7 IMU and NovAtel GPS to `robot.yaml`
+
+## Documentation
+
+| Document | Contents |
+|---|---|
+| [README.zh-CN.md](README.zh-CN.md) | Operating runbook (Chinese): connection, teleop, SLAM, Nav2, recording, troubleshooting |
+| [DATA_MANIFEST.md](DATA_MANIFEST.md) | Inventory of collected data, formats, frames and verification status |
+| [samples/husky_1008/README.md](samples/husky_1008/README.md) | Dataset card for the 2026-10-08 LiDAR recording |
+| [docs/…_comm_summary.md](docs/2026-10-12_husky_go2_comm_summary.md) | One-page Husky ↔ Go2 progress summary (EN + 中文) |
+| [docs/…_comm_detailed.md](docs/2026-10-12_husky_go2_comm_detailed.md) | Full setup log, procedures and root-cause notes |
+
+## Maintainer
+
+**Huihang Liu** · Computer Engineering, Penn State · [@greenaandblue](https://github.com/greenaandblue)
