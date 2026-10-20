@@ -4,7 +4,7 @@
 
 > This repository is a **temporary shared entry point** for robot-collected data, for the reconstruction team (Johann, Ying, et al.) and the digital-twin team.
 > Long-term storage, compute, and publishing will be decided after discussion with ICDS.
-> Last updated: 2026-10-08 | Maintainer: Huihang Liu
+> Last updated: 2026-10-20 | Maintainer: Huihang Liu
 
 ## Status legend
 
@@ -20,6 +20,7 @@
 |---|---|---|---|---|---|---|---|
 | `samples/go2_test02/` | Unitree Go2 | ____ | ____ | ____ | RGB, depth, timestamps | ❌ Missing | ⚠️ Intrinsics only / ❌ extrinsics |
 | `samples/husky_1008/` | Clearpath Husky A200 | 2026-10-08 | ____ | 414 s (≈160 s driving) | LiDAR point clouds, TF, odometry, AMCL pose, 2D map, 3D point-cloud map | ⚠️ KISS-ICP loop error 0.13 m | ✅ LiDAR extrinsics tape-measured |
+| `samples/museum_1019/` | Clearpath Husky A200 | 2026-10-19 | ____ (museum: hall + inner rooms) | 775 s in 3 recordings (180 m path) | Merged 3D point cloud (indoor only), per-recording clouds, Nav2 map, 3D models (GLB/STL) incl. glass door | ✅ KISS-ICP per scan, aligned 7–9 cm RMS | ✅ same extrinsics as husky_1008 |
 
 ## Data types
 

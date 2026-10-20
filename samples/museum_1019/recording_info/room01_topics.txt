@@ -1,0 +1,4 @@
+/a200_0544/sensors/lidar3d_0/points
+/a200_0544/tf
+/a200_0544/tf_static
+/a200_0544/platform/odom/filtered

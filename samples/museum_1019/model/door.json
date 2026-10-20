@@ -1,0 +1,30 @@
+{
+ "note": "hall <-> room04 double glass door, museum frame (m). Wall between x_room and x_hall; opening y0..y1, height h. Leaves hinge on hall face, scanned open ~90 deg toward hall (+x).",
+ "x_room": 0.42,
+ "x_hall": 1.3,
+ "y0": -1.35,
+ "y1": 0.9,
+ "height": 2.13,
+ "leaf_width": 1.125,
+ "leaf_thickness": 0.05,
+ "leaves": [
+  {
+   "name": "door_leaf_north",
+   "hinge": [
+    1.3,
+    0.9
+   ],
+   "open_y": 0.95,
+   "closed_dir": -1
+  },
+  {
+   "name": "door_leaf_south",
+   "hinge": [
+    1.3,
+    -1.35
+   ],
+   "open_y": -1.42,
+   "closed_dir": 1
+  }
+ ]
+}

@@ -1,0 +1,16 @@
+
+Files:             bag_0.mcap
+                   bag_1.mcap
+Bag size:          1.2 GiB
+Storage id:        mcap
+ROS Distro:        jazzy
+Duration:          223.030310057s
+Start:             Oct 19 2026 14:33:32.143781621 (1792420412.143781621)
+End:               Oct 19 2026 14:37:15.174091678 (1792420635.174091678)
+Messages:          23860
+Topic information: Topic: /a200_0544/platform/odom/filtered | Type: nav_msgs/msg/Odometry | Count: 9638 | Serialization Format: cdr
+                   Topic: /a200_0544/sensors/lidar3d_0/points | Type: sensor_msgs/msg/PointCloud2 | Count: 2052 | Serialization Format: cdr
+                   Topic: /a200_0544/tf | Type: tf2_msgs/msg/TFMessage | Count: 12169 | Serialization Format: cdr
+                   Topic: /a200_0544/tf_static | Type: tf2_msgs/msg/TFMessage | Count: 1 | Serialization Format: cdr
+Service:           0
+Service information: 
