@@ -25,7 +25,7 @@ Husky A200 + Velodyne VLP-16 field capture in a museum on 2026-10-19: the entran
 | `room04` | Inner rooms, pass 1 | 10:33:33–10:37:15 | 222 s | 62.8 m | 0.28 m/s | 2052 | 1.2 GiB |
 | `room05` | Inner rooms, pass 2 | 10:40:56–10:42:55 | 120 s | 37.7 m | 0.32 m/s | 1170 | 0.7 GiB |
 
-Other rooms were also recorded that day but are not included (poor results). Path lengths and speeds come from the LiDAR odometry.
+Two other recordings are not included: `room02` was started by accident, and `room03` was lost when the robot ran out of battery mid-recording, before the bag was saved. Path lengths and speeds come from the LiDAR odometry.
 
 ## Recording command
 
