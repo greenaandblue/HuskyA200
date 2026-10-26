@@ -1,3 +1,0 @@
-# Offline viewers are large generated HTML bundles (point data + three.js inlined).
-# Mark them generated so GitHub's language statistics reflect the source code.
-**/viewers/*.html linguist-generated=true
