@@ -54,6 +54,7 @@ museum_1019/
 │   ├── museum_scan_model_web.glb         # 0.32 M triangles
 │   └── door.json                         # measured hall <-> room04 double door
 ├── viewers/                    # offline HTML viewers (open in any browser, no internet needed)
+├── report/                     # process report (PDF + Word)
 ├── images/                     # floor plan, indoor/outdoor cleanup preview
 ├── recording_info/             # bag_info / metadata / topics for each recording
 ├── robot.yaml
@@ -61,6 +62,9 @@ museum_1019/
 ```
 
 **Raw bags (4.4 GiB) are not in the repository files**; they are attached to the release [`museum_1019-raw-bags`](https://github.com/greenaandblue/HuskyA200/releases/tag/museum_1019-raw-bags).
+
+Online viewers: [point cloud](https://museum-point-cloud.netlify.app) and [3D model](https://museum-3d-model.netlify.app).
+Process report: [PDF](report/Museum_Husky_Lidar_Run_Process_Report.pdf) / [Word](report/Museum_Husky_Lidar_Run_Process_Report.docx).
 
 ## Frame
 

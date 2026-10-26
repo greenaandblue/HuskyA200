@@ -54,6 +54,7 @@ museum_1019/
 │   ├── museum_scan_model_web.glb         # 32 万三角面
 │   └── door.json                         # 实测的大厅 <-> room04 双开门
 ├── viewers/                    # 离线 HTML 查看器（任意浏览器打开，不需要网络）
+├── report/                     # 过程报告（PDF + Word）
 ├── images/                     # 平面图、室内外清理预览
 ├── recording_info/             # 每段录像的 bag_info / metadata / 话题
 ├── robot.yaml
@@ -61,6 +62,9 @@ museum_1019/
 ```
 
 **原始 bag（4.4 GiB）不在仓库文件里**，作为附件挂在 Release [`museum_1019-raw-bags`](https://github.com/greenaandblue/HuskyA200/releases/tag/museum_1019-raw-bags) 上。
+
+在线查看：[点云](https://museum-point-cloud.netlify.app)、[3D 模型](https://museum-3d-model.netlify.app)。
+过程报告：[PDF](report/Museum_Husky_Lidar_Run_Process_Report.pdf) / [Word](report/Museum_Husky_Lidar_Run_Process_Report.docx)。
 
 ## 坐标系
 
