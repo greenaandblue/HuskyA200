@@ -60,7 +60,7 @@ museum_1019/
 └── scripts/                    # processing pipeline (see below)
 ```
 
-**Raw bags (4.4 GiB) are not in this repository**; they go to the OneDrive `husky_data` folder like the other samples.
+**Raw bags (4.4 GiB) are not in the repository files**; they are attached to the release [`museum_1019-raw-bags`](https://github.com/greenaandblue/HuskyA200/releases/tag/museum_1019-raw-bags).
 
 ## Frame
 
@@ -100,6 +100,6 @@ museum_1019/
 
 ## Still missing
 
-- [ ] Upload the raw bags to OneDrive
+- [x] Raw bags uploaded as a GitHub release
 - [ ] Align the museum frame with the building model
 - [ ] Go2 data from the same visit (Yifei)

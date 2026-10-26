@@ -60,7 +60,7 @@ museum_1019/
 └── scripts/                    # 处理流程代码（见下）
 ```
 
-**原始 bag（4.4 GiB）不在本仓库**，和其他样本一样放到 OneDrive 的 `husky_data` 文件夹。
+**原始 bag（4.4 GiB）不在仓库文件里**，作为附件挂在 Release [`museum_1019-raw-bags`](https://github.com/greenaandblue/HuskyA200/releases/tag/museum_1019-raw-bags) 上。
 
 ## 坐标系
 
@@ -100,6 +100,6 @@ museum_1019/
 
 ## 待完成
 
-- [ ] 把原始 bag 上传到 OneDrive
+- [x] 原始 bag 已作为 GitHub Release 上传
 - [ ] 博物馆坐标系与建筑模型对齐
 - [ ] 同一次采集的 Go2 数据（Yifei）
